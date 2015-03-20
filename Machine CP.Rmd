@@ -1,0 +1,112 @@
+---
+title: "Machine Learning CP"
+author: "David Lucas"
+date: "Thursday, March 19, 2015"
+output: html_document
+---
+#BARBELL LIFT ANALYSIS AND PREDICTION
+#### Introduction
+The Weight Lifting Exercises (WLE) dataset is used to investigate how well an activity is being performed. Six participants were performing one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions.
+"Classe" A corresponds to a correct execution of the exercise, while B, C, D, and E represent common mistakes.
+The assignment is to analyze the WLE dataset, find a model that accurately predicts the "Classe" outcome based on any
+other predictive variables provided in the dataset, and then use that model to predict the "Classe" outcome of a
+provided test group of 20.
+
+The data from this project come from the source:
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H.: Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany: ACM SIGCHI, 2013 (http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201).
+
+### Summary
+The original WLE data set had 19622 observations of 160 variables, many of which seem irrelevant or contain mostly NA's.
+After cleaning the data set, I got down to 48 significant variables. I took a random sample of 20% of my training set
+and set that aside as a testing set, before applying my final model to the submission assignemnt test values.
+I tried rpart, linear discriminant analysis, quadratic discriminant analysis, and finally random forest modelling, 
+and random forest was clearly the most effective with a 99.4% accuracy rate in predicting the test class. This corresponds to a .6% expected out of sample error rate. 
+ With a 99.4% accuracy rate, the probability of getting all 20 submission test questions right would be 85%, and I did in
+ fact get all 20 correct. I must have picked the right random seed :)
+ 
+### Analysis
+Reading and cleaning the data
+From reading the WLE material, I decided to use the sensor data from variables related to the Euler angles(roll, pitch,
+and yaw)and readings from the gyroscope, accelerometer, and magnetometer. This cleans up the data set nicely.
+```{r, echo=TRUE}
+wle <- read.csv( "C:/Users/owner/Documents/Coursera/pml-training.csv")
+str(wle$total_accel_belt)
+summary(wle$kurtosis_roll_belt)
+summary(wle$max_roll_belt)
+summary(wle$min_pitch_arm)
+library(dplyr)
+library(caret)
+wle.gy <- select(wle, starts_with("gyros"))
+wle.ac <- select(wle, starts_with("accel"))
+wle.to <- select(wle, starts_with("total_accel"))
+wle.ma <- select(wle, starts_with("magnet"))
+wle.ro <- select(wle, starts_with("roll"))
+wle.pi <- select(wle, starts_with("pitch"))
+wle.ya <- select(wle, starts_with("yaw"))
+wle.cl <- select(wle, starts_with("classe"))
+clean.wle <- cbind( wle.cl,wle.gy, wle.ac, wle.to, wle.ma, wle.pi, wle.ya)
+str(clean.wle)
+nearZeroVar(clean.wle)
+```
+The clean.wle dataset looks good and it passed the nearZerovar test.
+
+### Partition dataset in to training and testing
+```{r, echo=TRUE}
+set.seed(3624)
+inTrain <- createDataPartition(y=clean.wle$classe, p=0.8, list=FALSE)
+training <- clean.wle[inTrain,]
+testing <- clean.wle[-inTrain,]
+dim(training)
+dim(testing)
+```
+
+###Try model using Trees
+```{r,echo=TRUE}
+modFit.rp <- train(classe~., data =training, method = "rpart", trControl = trainControl(method ="cv", number =3))
+### Test predictions on testing set
+predictions <- predict(modFit.rp, newdata=testing)
+confusionMatrix(predictions,testing$classe)
+```
+Accuracy only 56%
+
+### Try Linear Discriminant Analysis
+```{r,echo=TRUE}
+modFit.ld <- train(classe ~., data=training, method="lda")
+
+summary(modFit.ld$finalModel)
+# Test predictions on testing set
+predictions <- predict(modFit.ld, newdata=testing)
+confusionMatrix(predictions,testing$classe)
+```
+Accuracy is 68%
+
+### Try Quadratic Disc Analaysis
+```{r,echo=TRUE}
+modFit.qd <- train(classe ~., data=training, method="qda")
+
+summary(modFit.qd$finalModel)
+### Test predictions on testing set
+predictions <- predict(modFit.qd, newdata=testing)
+confusionMatrix(predictions,testing$classe)
+```
+Accuracy is 87%
+
+###Try model using Random Forests
+Since the sample size is large, and people on the discussion forum were commenting on how long this 
+computation could take, I decided to limit k folds to 3. The model computation took 4 minutes.
+```{r,echo=TRUE}
+modFit.rf <- train(classe~., data =training, method = "rf", trControl = trainControl(method ="cv", number =3))
+### Test predictions on testing set
+predictions <- predict(modFit.rf, newdata=testing)
+confusionMatrix(predictions,testing$classe)
+```
+#99.4% accuracy!
+Let's take a look at the coefficients it chose:
+```{r,echo=TRUE}
+
+modFit.rf$finalModel
+```
+I performed the same cleaning model on the submssion test set, then applied the same random forest model
+to predict the results. They were correct on all 20.
+
+
